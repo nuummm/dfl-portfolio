@@ -63,6 +63,8 @@ def fit_dfl_grid(
     anchors = np.atleast_2d(np.asarray(anchors, float))
     if X.shape[1] != 2:
         raise ValueError("dfl_grid only supports two assets")
+    if n_grid < 3:
+        raise ValueError(f"n_grid must be at least 3 to tell interior from boundary, got {n_grid}")
     bounds = grid_bounds(anchors, scale)
     theta1 = np.linspace(*bounds[0], n_grid)
     theta2 = np.linspace(*bounds[1], n_grid)
