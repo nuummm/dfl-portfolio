@@ -9,10 +9,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv python install 3.12
+      - run: uv python install ${{ matrix.python }}
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
