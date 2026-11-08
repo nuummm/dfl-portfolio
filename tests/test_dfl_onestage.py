@@ -60,6 +60,7 @@ def _solver_or_skip():
 
 
 @pytest.mark.solver
+@pytest.mark.filterwarnings("ignore:grid minimum lies on the boundary")
 @pytest.mark.parametrize("formulation", ["kkt", "dual"])
 def test_solver_matches_brute_force_reference(small_data, formulation):
     """Compare objective values, not thetas: the minimiser is not unique."""

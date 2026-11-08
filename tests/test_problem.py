@@ -38,6 +38,13 @@ def test_closed_form_is_never_beaten_by_a_feasible_point(rng, random_spd):
     assert best <= costs.min() + 1e-12
 
 
+def test_zero_curvature_gives_a_corner():
+    """V11 + V22 = 2 V12 makes the cost linear in w1 even for delta > 0."""
+    V = np.array([[1.0, 1.0], [1.0, 1.0]])
+    np.testing.assert_array_equal(solve_mvo_2asset(np.array([0.3, 0.1]), V, 0.5), [1.0, 0.0])
+    np.testing.assert_array_equal(solve_mvo_2asset(np.array([0.1, 0.3]), V, 0.5), [0.0, 1.0])
+
+
 def test_delta_to_zero_picks_the_best_predicted_asset(rng, random_spd):
     for _ in range(20):
         yhat, V = rng.standard_normal(2), random_spd(2)
@@ -64,7 +71,9 @@ def test_perfect_foresight_has_zero_regret():
 def test_offset_along_ones_changes_no_regret():
     """Adding the same constant to every asset's return moves neither decisions nor regret."""
     base = generate(80, SyntheticConfig(rho=0.0), np.random.default_rng(2))
-    shifted = generate(80, SyntheticConfig(rho=0.7, b=(1.0, 1.0)), np.random.default_rng(2))
+    shifted = generate(
+        80, SyntheticConfig(misspec="offset", rho=0.7, b=(1.0, 1.0)), np.random.default_rng(2)
+    )
     np.testing.assert_allclose(base[0], shifted[0])
     rng = np.random.default_rng(3)
     for theta in rng.uniform(-2, 3, size=(25, 2)):

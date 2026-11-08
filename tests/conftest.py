@@ -6,8 +6,8 @@ from dfl_portfolio.synthetic import SyntheticConfig, generate
 
 @pytest.fixture
 def small_data():
-    """26 training periods of the two-asset generator with a strong offset (rho = 1)."""
-    return generate(26, SyntheticConfig(rho=1.0), np.random.default_rng(0))
+    """26 training periods of the two-asset generator with the nonlinear term (rho = 2)."""
+    return generate(26, SyntheticConfig(misspec="nonlinear", rho=2.0), np.random.default_rng(0))
 
 
 @pytest.fixture
