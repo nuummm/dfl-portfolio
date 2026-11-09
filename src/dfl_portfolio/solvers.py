@@ -1,9 +1,10 @@
-"""Thin wrappers around the two solvers the one-stage model was run with.
+"""Thin wrappers for Gurobi and Knitro.
 
 * Gurobi (``gurobipy``, optional extra): spatial branch-and-bound with ``NonConvex=2``; the
   result is a global optimum only when the reported gap is closed.
 * Knitro through its AMPL driver, located by the ``KNITROAMPL`` environment variable; the
-  result is a local solution.
+  result is a local solution. This path has not been run against the results in this
+  repository, and option names may differ between Knitro versions.
 """
 
 from __future__ import annotations

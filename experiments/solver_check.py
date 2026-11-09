@@ -22,6 +22,10 @@ from dfl_portfolio.problem import decision_cost
 from dfl_portfolio.synthetic import SyntheticConfig, generate
 
 ROOT = Path(__file__).resolve().parents[1]
+SCENARIOS = {
+    "well-specified": SyntheticConfig(rho=0.0),
+    "nonlinear": SyntheticConfig(misspec="nonlinear", rho=2.0),
+}
 
 
 def main() -> None:
@@ -29,7 +33,7 @@ def main() -> None:
     p.add_argument("--seeds", type=int, default=5)
     p.add_argument("--n-train", type=int, default=26)
     p.add_argument("--delta", type=float, default=0.5)
-    p.add_argument("--rhos", type=float, nargs="+", default=[0.0, 1.0])
+    p.add_argument("--scenarios", nargs="+", choices=list(SCENARIOS), default=list(SCENARIOS))
     p.add_argument("--time-limit", type=float, default=60.0)
     p.add_argument("--out", type=Path, default=ROOT / "results" / "solver_check.md")
     args = p.parse_args()
@@ -45,13 +49,13 @@ def main() -> None:
         "OLS / IPO points. `L(theta)` re-evaluates the returned theta with the exact "
         "lower-level solution. Runtimes are wall-clock on one laptop and only indicative.",
         "",
-        "| rho | seed | formulation | theta | objective | L(theta) | ref | objective - ref | gap | "
-        "time [s] | status |",
-        "|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---|",
+        "| scenario | seed | formulation | theta | objective | L(theta) | ref | objective - ref "
+        "| gap | time [s] | status |",
+        "|---|---:|---|---|---:|---:|---:|---:|---:|---:|---|",
     ]
-    for rho in args.rhos:
+    for name in args.scenarios:
         for seed in range(args.seeds):
-            X, Y, V = generate(args.n_train, SyntheticConfig(rho=rho), np.random.default_rng(seed))
+            X, Y, V = generate(args.n_train, SCENARIOS[name], np.random.default_rng(seed))
             anchors = np.stack([fit_ols(X, Y), fit_ipo(X, Y, V, args.delta)])
             ref = fit_dfl_grid(X, Y, V, args.delta, anchors=anchors, n_grid=401).cost
             for formulation in ("kkt", "dual"):
@@ -61,7 +65,7 @@ def main() -> None:
                 exact = decision_cost(X * res.theta, Y, V, args.delta)
                 info = res.info
                 lines.append(
-                    f"| {rho:g} | {seed} | {formulation} "
+                    f"| {name} | {seed} | {formulation} "
                     f"| ({res.theta[0]:.3g}, {res.theta[1]:.3g}) "
                     f"| {res.objective:.6f} | {exact:.6f} "
                     f"| {ref:.6f} | {res.objective - ref:+.1e} | {info['gap']:.1e} "
