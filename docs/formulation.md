@@ -24,7 +24,7 @@ prediction (`problem.solve_mvo_2asset`, `problem.solve_mvo_pgd`).
 
 ## 2. Learning objectives
 
-* **Prediction error** (OLS): $\frac1T \sum_t \lVert \hat y_t - y_t \rVert^2$.
+* **Prediction error** (OLS): $\frac{1}{Td} \sum_t \lVert \hat y_t - y_t \rVert^2$, the mean over periods and assets (`problem.mse`).
 * **Decision cost** (DFL): $L(\theta) = \frac1T \sum_t c\big(w^\star(x_t \odot \theta, V_t);\ y_t, V_t\big)$.
 * **Regret**: $L(\theta)$ minus the same average for the perfect-foresight decisions
   $w^\star(y_t, V_t)$. It is non-negative and zero for perfect predictions.
@@ -32,14 +32,23 @@ prediction (`problem.solve_mvo_2asset`, `problem.solve_mvo_pgd`).
 Because $c$ is linear in $y$, the best decision given $x$ is $w^\star(\mathbb E[y \mid x], V)$.
 When the model class contains $\mathbb E[y \mid x]$, accurate prediction is therefore also
 the best decision rule, and decision-focused training can only help through finite-sample
-effects. The interesting case is misspecification, which `synthetic.py` controls with
-$\rho$.
+effects. The interesting case is misspecification. `synthetic.py` generates
+
+$$y_t = a \odot x_t + \rho\, b \odot g(x_t) + \varepsilon_t$$
+
+with one of two terms the model cannot represent:
+
+* **offset**, $g = 1$: a constant tilt between the assets. A per-asset intercept removes it,
+  so the fair comparison is OLS with an intercept, not a cleverer loss.
+* **nonlinear**, $g(x) = \lvert x - \mu_x \rvert - \mathbb E \lvert x - \mu_x \rvert$:
+  a V-shaped term with zero mean under the stationary distribution of $x$. An intercept
+  cannot absorb it, so the best predictor within any linear class is still misspecified.
 
 **A shift along $\mathbf 1$ changes nothing.** For $w \in \Delta$,
 $c(w; y + \kappa \mathbf 1, V) = c(w; y, V) - \alpha \kappa$. A common offset on all assets
 moves every portfolio's cost by the same constant, so it changes neither $w^\star$ nor the
 regret of any $\theta$ (`tests/test_problem.py::test_offset_along_ones_changes_no_regret`).
-This is why the synthetic offset uses $b = (+1, -1)$.
+This is why the synthetic term uses $b = (+1, -1)$.
 
 ## 3. Two assets in closed form
 
@@ -78,12 +87,12 @@ $H \mathbf 1 = 0$ and $H^\top \mathbf 1 = 0$. Substituting $\hat y_t = D_t \thet
 $D_t = \operatorname{diag}(x_t)$ and $S_t = H_t^\top V_t H_t$,
 
 $$
-L_{\text{relaxed}}(\theta) = \frac{\alpha^2}{2\delta}\, \theta^\top \Big(\sum_t D_t S_t D_t\Big) \theta
-- \frac{\alpha^2}{\delta}\, \theta^\top \sum_t D_t H_t^\top y_t + \text{const}.
+L_{\text{relaxed}}(\theta) = \frac{\alpha^2}{2\delta T}\, \theta^\top \Big(\sum_t D_t S_t D_t\Big) \theta
+- \frac{\alpha^2}{\delta T}\, \theta^\top \sum_t D_t H_t^\top y_t + \text{const}.
 $$
 
 The cross term $\theta^\top D_t H_t^\top V_t c_t$ vanishes because $V_t c_t \propto \mathbf 1$.
-The common factor $\alpha^2/\delta$ cancels in the normal equations, so
+The common factor $\alpha^2/(\delta T)$ cancels in the normal equations, so
 
 $$
 \theta_{\text{IPO}} = \Big(\sum_t D_t S_t D_t\Big)^{-1} \sum_t D_t H_t^\top y_t ,
@@ -112,7 +121,8 @@ $$
 $$
 
 There are $d + 2Td + T$ variables: 132 for $d = 2$, $T = 26$. $\lambda_{\text{anchor}} = 0$
-by default. $\theta$ starts from $\theta_{\text{IPO}}$.
+by default. $\theta$ starts from $\theta_{\text{IPO}}$ and has no bounds, so with
+$\lambda_{\text{anchor}} = 0$ the bilinear terms in $(\theta, w)$ are unbounded too.
 
 **`dual` variant.** Multiplying stationarity by $w_t^\top$ and using the budget gives
 $\lambda_t^\top w_t = \delta\, w_t^\top V_t w_t - \alpha\, \hat y_t^\top w_t - \mu_t$. Since
@@ -128,7 +138,8 @@ two variants have the same feasible set but behave differently in a solver.
 
 **Solvers.** Both variants are nonconvex. Complementarity constraints violate the usual
 constraint qualifications at every feasible point (see Scheel & Scholtes, 2000), so a local
-NLP solver (Knitro here) returns a local solution without the usual guarantees. Gurobi's
+NLP solver such as Knitro returns a local solution without the usual guarantees (the
+Knitro wrapper in `solvers.py` was not run for the results in this repository). Gurobi's
 spatial branch-and-bound (`NonConvex=2`) certifies a global optimum when the reported gap
 closes. `experiments/solver_check.py` compares both against the brute-force reference on
 small instances.
@@ -137,7 +148,15 @@ small instances.
 
 $L$ depends on $\theta$ only through the decisions it induces. It is piecewise smooth, and
 flat wherever all decisions sit at the same corners, so the minimiser is generally not
-unique. When the model is well specified ($\rho = 0$) the in-sample $L$ can keep decreasing
-slowly along a ray $\theta = k(1, 1)$ as $k$ grows, so the grid minimum can land on the
-boundary. That is in-sample overfitting, not a better decision rule. Comparisons between
-methods and solvers therefore use objective values, never $\theta$ itself.
+unique. Scaling $\theta$ up pushes more decisions to corners, and once most of them are
+corners $L$ changes little along such a direction. The grid minimum therefore often lies
+on the edge of the default box (three times the spread of the OLS and IPO anchors,
+at least 3 wide): in 6, 9 and 8 of 20 seeds for the well-specified, offset and nonlinear
+scenarios of `experiments/synthetic_demo.py`. Rerunning with `--scale 10` (a box about
+3.3 times wider) moves the minimiser further out and inflates the test MSE of DFL-grid
+roughly 8 to 11 times, but its mean test regret changes by less than 0.001 in every
+scenario. Even then the minimum is on the edge in 7, 4 and 3 of 20 seeds, so the
+in-sample optimum is not bracketed in every seed; the test regret is simply insensitive
+to how far out along the valley it lies. The location of the minimiser is weakly
+identified; the test regret it achieves is not. Comparisons between methods and
+solvers therefore use objective values, never $\theta$ itself.
