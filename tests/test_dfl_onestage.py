@@ -47,6 +47,18 @@ def test_true_lower_level_solution_is_feasible(small_data, formulation):
     assert pyo.value(m.obj) == pytest.approx(decision_cost(X * theta, Y, V, DELTA), rel=1e-10)
 
 
+def test_anchor_term_in_objective(small_data):
+    X, Y, V = small_data
+    theta, anchor, lam = np.array([0.8, 0.3]), np.array([1.5, -0.5]), 0.7
+    m = build_model(X, Y, V, DELTA, theta_init=theta, lambda_anchor=lam, theta_anchor=anchor)
+    W = decide(X * theta, V, DELTA)
+    for t in m.T:
+        for j in m.J:
+            m.w[t, j].value = W[t, j]
+    expected = decision_cost(X * theta, Y, V, DELTA) + 0.5 * lam * np.sum((theta - anchor) ** 2)
+    assert pyo.value(m.obj) == pytest.approx(expected, rel=1e-10)
+
+
 def test_anchor_requires_target(small_data):
     with pytest.raises(ValueError):
         build_model(*small_data, DELTA, lambda_anchor=1.0)
